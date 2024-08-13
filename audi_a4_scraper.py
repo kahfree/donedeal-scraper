@@ -1,3 +1,4 @@
+import urllib.parse
 from bs4 import BeautifulSoup
 import requests
 import re
@@ -5,19 +6,19 @@ import time
 import csv
 import datetime
 
-def dealer_dictionary_generator():
+def dealer_dictionary_generator(make, model):
     dealer_count = 0
     dealer_dictionary = {}
 
     start_from = 0
-    soup = get_page(start_from)
+    soup = get_page(make, model, start_from)
     result_count = get_result_count(soup)
     result_count = int(result_count)
     page_count = 1
     rows = []
 
     while start_from <= result_count:
-        soup = get_page(start_from)
+        soup = get_page(make, model, start_from)
         
         # Find all li elements with data-testid starting with 'listing-card-index-'
         li_elements = soup.find_all('li', attrs={'data-testid': re.compile(r'listing-card-index-\d+')})
@@ -34,7 +35,7 @@ def dealer_dictionary_generator():
         # time.sleep(3)
 
     # Specify the CSV file path
-    csv_file_path = 'car_listings.csv'
+    csv_file_path = f'{make}_{model}_listings.csv'
 
     # Write data to CSV
     with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
@@ -60,8 +61,23 @@ def get_result_count(soup):
         print("h2 element with data-testid 'h2-details-text' not found.")
     return 0
 
-def get_page(start_from):
-    url = f"https://www.donedeal.ie/cars?year_from=2014&year_to=2016&make=Audi%3Bmodel%3AA4&start={start_from}"
+def get_page(make, model, start_from):
+    base_url = "https://www.donedeal.ie/cars"
+    
+    # Manually construct the URL parameters
+    make_model_param = f"{urllib.parse.quote(make)};model:{urllib.parse.quote(model)}"
+    params = {
+        'year_from': 2014,
+        'year_to': 2016,
+        'make': make_model_param,
+        'start': start_from
+    }
+
+    # Manually construct the query string
+    query_string = f"year_from={params['year_from']}&year_to={params['year_to']}&make={params['make']}&start={params['start']}"
+    url = f"{base_url}?{query_string}"
+    print(f"Fetching URL: {url}")
+
     headers = {'User-Agent': 'Mozilla/5.0'}
 
     page = requests.get(url, headers=headers)
@@ -105,7 +121,7 @@ def extract_listing_info(li_element):
 
     return data
 
-def calculate_average_price(input_csv, output_csv):
+def calculate_average_price(input_csv, output_csv, make_model):
     total_price = 0
     count = 0
 
@@ -133,12 +149,18 @@ def calculate_average_price(input_csv, output_csv):
     with open(output_csv, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(['timestamp', 'average_price'])  # Write header if file does not exist
-        writer.writerow([timestamp, f"€{average_price:,.2f}"])
+            writer.writerow(['timestamp','make-model', 'average_price'])  # Write header if file does not exist
+        writer.writerow([timestamp, make_model, f"€{average_price:,.2f}"])
 
     print(f"Average price calculated and appended to {output_csv}.")
 
-
 # Example usage:
-dealer_dictionary_generator()
-calculate_average_price('car_listings.csv', 'average_price.csv')
+makes_and_models = [
+    ('Audi', 'A4'),
+    ('BMW', '3-Series'),
+    ('Mercedes-Benz', 'C-Class')
+]
+
+for make, model in makes_and_models:
+    dealer_dictionary_generator(make, model)
+    calculate_average_price(f'{make}_{model}_listings.csv', 'average_price.csv', f'{make}-{model}')
