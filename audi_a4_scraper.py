@@ -2,40 +2,34 @@ import urllib.parse
 from bs4 import BeautifulSoup
 import requests
 import re
-import time
 import csv
 import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 def dealer_dictionary_generator(make, model):
-    dealer_count = 0
     dealer_dictionary = {}
-
+    rows = []
     start_from = 0
+
     soup = get_page(make, model, start_from)
     result_count = get_result_count(soup)
     result_count = int(result_count)
-    page_count = 1
-    rows = []
-
-    while start_from <= result_count:
-        soup = get_page(make, model, start_from)
-        
-        # Find all li elements with data-testid starting with 'listing-card-index-'
-        li_elements = soup.find_all('li', attrs={'data-testid': re.compile(r'listing-card-index-\d+')})
-
-        # Iterate over each li element and extract the data
-        for li_element in li_elements:
-            row = extract_listing_info(li_element)
-            rows.append(row)
-        
-        page_count += 1
-        print(f"Processed page starting at: {start_from}")
-        start_from += 30
     
-        # time.sleep(3)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_page = {executor.submit(scrape_page, make, model, start): start for start in range(0, result_count + 1, 30)}
+        
+        # Use tqdm to display a progress bar
+        for future in tqdm(as_completed(future_to_page), total=len(future_to_page), desc="Processing pages"):
+            start = future_to_page[future]
+            try:
+                page_rows = future.result()
+                rows.extend(page_rows)
+            except Exception as exc:
+                print(f"\nPage {start} generated an exception: {exc}")
 
     # Specify the CSV file path
-    csv_file_path = f'{make}_{model}_listings.csv'
+    csv_file_path = f'results/{make}_{model}_listings.csv'
 
     # Write data to CSV
     with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
@@ -43,8 +37,20 @@ def dealer_dictionary_generator(make, model):
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"Data successfully saved to {csv_file_path}.")
+    print(f"\nData successfully saved to {csv_file_path}.")
     return dealer_dictionary
+
+def scrape_page(make, model, start_from):
+    soup = get_page(make, model, start_from)
+    rows = []
+    
+    li_elements = soup.find_all('li', attrs={'data-testid': re.compile(r'listing-card-index-\d+')})
+
+    for li_element in li_elements:
+        row = extract_listing_info(li_element)
+        rows.append(row)
+    
+    return rows
 
 def get_result_count(soup):
     h2_element = soup.find('h2', {'data-testid': 'h2-details-text'})
@@ -53,7 +59,6 @@ def get_result_count(soup):
         strong_tag = h2_element.find('strong')
         if strong_tag:
             important_text = strong_tag.get_text(strip=True)
-            print(f"Number of results: {important_text}")
             return important_text
         else:
             print("Number of results not found.")
@@ -64,7 +69,6 @@ def get_result_count(soup):
 def get_page(make, model, start_from):
     base_url = "https://www.donedeal.ie/cars"
     
-    # Manually construct the URL parameters
     make_model_param = f"{urllib.parse.quote(make)};model:{urllib.parse.quote(model)}"
     params = {
         'year_from': 2014,
@@ -73,34 +77,21 @@ def get_page(make, model, start_from):
         'start': start_from
     }
 
-    # Manually construct the query string
     query_string = f"year_from={params['year_from']}&year_to={params['year_to']}&make={params['make']}&start={params['start']}"
     url = f"{base_url}?{query_string}"
-    print(f"Fetching URL: {url}")
 
     headers = {'User-Agent': 'Mozilla/5.0'}
-
     page = requests.get(url, headers=headers)
-    html_length = len(page.content)
-    print(f"Length of HTML content: {html_length} bytes")
-
     soup = BeautifulSoup(page.content, 'lxml')
-    li_count = len(soup.find_all('li'))
-    print(f"Number of <li> elements: {li_count}")
-
-    listing_card_count = len(soup.find_all('li', attrs={'data-testid': re.compile(r'listing-card-index-\d+')}))
-    print(f"Number of listing card elements: {listing_card_count}")
 
     return soup
 
 def extract_listing_info(li_element):
     data = {}
 
-    # Extract the title
     title_element = li_element.find('p')
     data['title'] = title_element.get_text(strip=True) if title_element else 'No title found'
 
-    # Extract details from the list
     details_list = li_element.find_all('li')
     if details_list and len(details_list) >= 3:
         data['engine_size'] = details_list[0].get_text(strip=True)
@@ -111,11 +102,9 @@ def extract_listing_info(li_element):
         data['engine_type'] = 'No details found'
         data['total_kms'] = 'No details found'
 
-    # Extract the price
     price_element = li_element.find('p', text=re.compile(r'€\d+'))
     data['price'] = price_element.get_text(strip=True) if price_element else 'No price found'
 
-    # Extract the link
     link_element = li_element.find('a', href=True)
     data['link'] = link_element['href'] if link_element else 'No link found'
 
@@ -138,7 +127,6 @@ def calculate_average_price(input_csv, output_csv, make_model):
     average_price = total_price / count if count > 0 else 0
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-    # Check if the file exists before writing the header
     file_exists = False
     try:
         with open(output_csv, 'r', newline='', encoding='utf-8') as file:
@@ -163,4 +151,4 @@ makes_and_models = [
 
 for make, model in makes_and_models:
     dealer_dictionary_generator(make, model)
-    calculate_average_price(f'{make}_{model}_listings.csv', 'average_price.csv', f'{make}-{model}')
+    calculate_average_price(f'results/{make}_{model}_listings.csv', 'average_price.csv', f'{make}-{model}')
