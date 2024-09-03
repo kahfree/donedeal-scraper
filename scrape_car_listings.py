@@ -12,6 +12,9 @@ import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
 
 def dealer_dictionary_generator(make, model):
     dealer_count = 0
@@ -209,19 +212,37 @@ def generate_graph(output_csv, make_model):
 
 
 def find_cheapest_cars(input_csv, average_price):
-    # Load the cleaned data into a pandas DataFrame
-    df = pd.read_csv(input_csv)
+    data = pd.read_csv(input_csv)
+    ideal_values = {
+    'price': 10000,
+    'total_kms': 130000
+    }
 
-    # Filter out cars with a price less than 2000
-    df = df[df['price'] >= 2000]
+    data['price_diff'] = (data['price'] - ideal_values['price']).abs()
+    data['total_kms_diff'] = (data['total_kms'] - ideal_values['total_kms']).abs()
 
-    # Sort by price first, then mileage
-    df_sorted = df.sort_values(by=['price', 'total_kms'], ascending=[True, True])
+    print(data)
 
-    # Select the top 3 cheapest cars
-    top_deals = df_sorted.head(3)
+    scaler = StandardScaler()
+    data[['price_diff','total_kms_diff']] = scaler.fit_transform(data[['price_diff','total_kms_diff']])
 
-    # Convert the top deals into a list of tuples for compatibility
+    data['score'] = data['price_diff'] + data['total_kms_diff']
+
+    data = data.sort_values(by='score')
+    # print(data)
+    # # Load the cleaned data into a pandas DataFrame
+    # df = pd.read_csv(input_csv)
+
+    # # Filter out cars with a price less than 2000
+    # df = df[df['price'] >= 2000]
+
+    # # Sort by price first, then mileage
+    # df_sorted = df.sort_values(by=['price', 'total_kms'], ascending=[True, True])
+
+    # # Select the top 3 cheapest cars
+    top_deals = data.head(3)
+
+    # # Convert the top deals into a list of tuples for compatibility
     cars = [(row['price'], row['total_kms'], row) for _, row in top_deals.iterrows()]
 
     return cars
