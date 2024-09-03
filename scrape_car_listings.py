@@ -3,10 +3,12 @@ from bs4 import BeautifulSoup
 import requests
 import re
 import time
+import os
 import csv
 import datetime
 import matplotlib.pyplot as plt
 import smtplib
+import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -38,7 +40,7 @@ def dealer_dictionary_generator(make, model):
         start_from += 30
     
     # Specify the CSV file path
-    csv_file_path = f'{make}_{model}_listings.csv'
+    csv_file_path = f'raw_listings/{make}_{model}_listings_raw.csv'
 
     # Write data to CSV
     with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
@@ -77,7 +79,7 @@ def get_page(make, model, start_from):
     }
 
     # Manually construct the query string
-    query_string = f"year_from={params['year_from']}&year_to={params['year_to']}&make={params['make']}&start={params['start']}"
+    query_string = f"year_from={params['year_from']}&year_to={params['year_to']}&make={params['make']}&start={params['start']}&country=Ireland"
     url = f"{base_url}?{query_string}"
     print(f"Fetching URL: {url}")
 
@@ -124,62 +126,50 @@ def extract_listing_info(li_element):
 
     return data
 
-def clean_and_calculate_average_price(input_csv, output_csv, make_model):
-    total_price = 0
-    count = 0
-    rows = []
+def calculate_average_price(input_csv, make_model):
+    # Load the cleaned data into a pandas DataFrame
+    df = pd.read_csv(input_csv)
 
-    with open(input_csv, mode='r', newline='', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            if all(row.values()):  # Check if all values in the row are non-empty
-                price_text = row['price']
-                price_match = re.search(r'€(\d+,\d+|\d+)', price_text.replace(',', ''))
-                if price_match:
-                    price = int(price_match.group(1).replace(',', ''))
-                    total_price += price
-                    count += 1
-                    rows.append(row)
+    # Calculate the average price
+    average_price = df['price'].mean()
 
-    average_price = total_price / count if count > 0 else 0
+    # Get the current timestamp
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-    # Save the cleaned data back to the CSV
-    with open(input_csv, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=['title', 'engine_size', 'engine_type', 'total_kms', 'price', 'link'])
-        writer.writeheader()
-        writer.writerows(rows)
+    # Create the 'averages' directory if it doesn't exist
+    os.makedirs('averages', exist_ok=True)
 
-    # Write the average price to the output CSV
-    file_exists = False
-    try:
-        with open(output_csv, 'r', newline='', encoding='utf-8') as file:
-            file_exists = True
-    except FileNotFoundError:
-        pass
+    # Path to the make-model specific CSV in the 'averages' directory
+    output_csv = f'averages/{make_model}_average.csv'
+
+    # Write the average price to the make-model specific CSV
+    file_exists = os.path.exists(output_csv)
 
     with open(output_csv, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(['timestamp', 'make-model', 'average_price'])  # Write header if file does not exist
+            writer.writerow(['timestamp', 'make_model', 'average_price'])  # Write header if file does not exist
         writer.writerow([timestamp, make_model, f"€{average_price:,.2f}"])
 
-    print(f"Average price calculated and appended to {output_csv}.")
+    print(f"Average price calculated and saved to {output_csv}.")
     return average_price
 
-def calculate_average_of_averages(output_csv):
-    total_average_price = 0
-    count = 0
+def calculate_average_of_averages(make_model_csv):
+    # Read the CSV file containing the averages for the specific make and model
+    df = pd.read_csv(make_model_csv)
 
-    with open(output_csv, mode='r', newline='', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            avg_price_text = row['average_price'].replace('€', '').replace(',', '')
-            avg_price = float(avg_price_text)
-            total_average_price += avg_price
-            count += 1
+    # Ensure the 'average_price' column exists
+    if 'average_price' in df.columns:
+        # Convert the 'average_price' column to numeric, removing any non-numeric characters
+        df['average_price'] = df['average_price'].replace({'€': '', ',': ''}, regex=True).astype(float)
+        
+        # Calculate the average of the averages in the file
+        avg_of_avg = df['average_price'].mean()
 
-    return total_average_price / count if count > 0 else 0
+        return avg_of_avg
+    else:
+        print("The 'average_price' column was not found in the CSV.")
+        return 0
 
 def calculate_percentage_difference(current_average, historical_average):
     if historical_average == 0:
@@ -195,7 +185,7 @@ def generate_graph(output_csv, make_model):
         reader = csv.DictReader(file)
         for row in reader:
             # Check if the row matches the current make and model
-            if row['make-model'] == make_model:
+            if row['make_model'] == make_model:
                 timestamps.append(row['timestamp'])
                 avg_price_text = row['average_price'].replace('€', '').replace(',', '')
                 averages.append(float(avg_price_text))
@@ -210,36 +200,29 @@ def generate_graph(output_csv, make_model):
     plt.tight_layout()  # Adjust layout to fit labels
 
     # Save the graph as an image file
-    graph_path = f'{make_model}_average_price_graph.png'
+    graph_path = f'graphs/{make_model}_average_price_graph.png'
     plt.savefig(graph_path)
     plt.close()
     return graph_path
 
 
 def find_cheapest_cars(input_csv, average_price):
-    cars = []
+    # Load the cleaned data into a pandas DataFrame
+    df = pd.read_csv(input_csv)
 
-    with open(input_csv, mode='r', newline='', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            price_text = row['price']
-            price_match = re.search(r'€(\d+,\d+|\d+)', price_text.replace(',', ''))
-            if price_match:
-                price = int(price_match.group(1).replace(',', ''))
-                
-                # Skip cars with price less than 2000
-                if price < 2000:
-                    continue
-                
-                mileage_text = row['total_kms'].replace(',', '')
-                mileage_match = re.search(r'\d+', mileage_text)
-                if mileage_match:
-                    mileage = int(mileage_match.group())
-                    cars.append((price, mileage, row))
+    # Filter out cars with a price less than 2000
+    df = df[df['price'] >= 2000]
 
     # Sort by price first, then mileage
-    cars.sort(key=lambda x: (x[0], x[1]))
-    return cars[:3]  # Return the top 3 cheapest cars
+    df_sorted = df.sort_values(by=['price', 'total_kms'], ascending=[True, True])
+
+    # Select the top 3 cheapest cars
+    top_deals = df_sorted.head(3)
+
+    # Convert the top deals into a list of tuples for compatibility
+    cars = [(row['price'], row['total_kms'], row) for _, row in top_deals.iterrows()]
+
+    return cars
 
 def send_email(graph_path, percentage_diff, cheapest_cars):
     from_address = "ethancaff@gmail.com"
@@ -278,6 +261,48 @@ def send_email(graph_path, percentage_diff, cheapest_cars):
 
     print(f"Email sent to {to_address}.")
 
+def clean_raw_listings(raw_csv):
+    df = pd.read_csv(raw_csv)
+    column_data_types = df.dtypes
+    print("Data types of each column:\n", column_data_types)
+    # Step 1: Clean the 'price' column
+    df['price'] = df['price'].replace({'€': '', ',': ''}, regex=True)
+    df['price'] = pd.to_numeric(df['price'], errors='coerce')
+    df = df.dropna(subset=['price'])
+
+    # Step 2: Clean the 'total_kms' column
+    # Convert miles to kilometers where necessary
+    def convert_to_kms(value):
+        value = str(value).replace(',', '')
+        if 'mi' in value:
+            kms = float(value.replace(' mi', '')) * 1.60934
+        elif 'km' in value:
+            kms = float(value.replace(' km', ''))
+        else:
+            return None  # For values that are not valid
+        return kms
+
+    df['total_kms'] = df['total_kms'].apply(convert_to_kms)
+    df = df.dropna(subset=['total_kms'])
+
+    # Step 3: Drop the 'engine_size' column
+    df = df.drop(columns=['engine_size'])
+
+    # Step 4: Get the value counts of 'engine_type'
+    engine_type_counts = df['engine_type'].value_counts()
+
+    # Display the cleaned DataFrame and the value counts for 'engine_type'
+    print("Cleaned DataFrame:\n", df)
+    print("\nValue counts for 'engine_type':\n", engine_type_counts)
+
+    column_data_types = df.dtypes
+    print("Data types of each column:\n", column_data_types)
+
+    new_csv_path = raw_csv.replace('raw','clean')
+    df.to_csv(f"{new_csv_path}",index=False)
+
+    print(f"\nCleaned data has been saved to '{new_csv_path}'")
+
 def main():
     # Example usage:
     makes_and_models = [
@@ -288,12 +313,13 @@ def main():
 
     for make, model in makes_and_models:
         dealer_dictionary = dealer_dictionary_generator(make, model)
-        avg_price = clean_and_calculate_average_price(f'{make}_{model}_listings.csv', 'average_price.csv', f'{make}-{model}')
-        historical_avg = calculate_average_of_averages('average_price.csv')
+        clean_raw_listings(f'raw_listings/{make}_{model}_listings_raw.csv')
+        avg_price = calculate_average_price(f'clean_listings/{make}_{model}_listings_clean.csv', f'{make}_{model}')
+        historical_avg = calculate_average_of_averages(f'averages/{make}_{model}_average.csv')
         percentage_diff = calculate_percentage_difference(avg_price, historical_avg)
 
-        graph_path = generate_graph('average_price.csv',f'{make}-{model}')
-        cheapest_cars = find_cheapest_cars(f'{make}_{model}_listings.csv', avg_price)
+        graph_path = generate_graph(f'averages/{make}_{model}_average.csv', f'{make}_{model}')
+        cheapest_cars = find_cheapest_cars(f'clean_listings/{make}_{model}_listings_clean.csv', avg_price)
 
         send_email(graph_path, percentage_diff, cheapest_cars)
 
