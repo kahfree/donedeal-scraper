@@ -43,6 +43,7 @@ def dealer_dictionary_generator(make, model):
     csv_file_path = f'raw_listings/{make}_{model}_listings_raw.csv'
 
     # Write data to CSV
+    os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
     with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(file, fieldnames=['title', 'engine_size', 'engine_type', 'total_kms', 'price', 'link'])
         writer.writeheader()
@@ -144,7 +145,7 @@ def calculate_average_price(input_csv, make_model):
 
     # Write the average price to the make-model specific CSV
     file_exists = os.path.exists(output_csv)
-
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
     with open(output_csv, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists:
@@ -201,6 +202,7 @@ def generate_graph(output_csv, make_model):
 
     # Save the graph as an image file
     graph_path = f'graphs/{make_model}_average_price_graph.png'
+    os.makedirs(os.path.dirname(graph_path), exist_ok=True)
     plt.savefig(graph_path)
     plt.close()
     return graph_path
@@ -299,6 +301,7 @@ def clean_raw_listings(raw_csv):
     print("Data types of each column:\n", column_data_types)
 
     new_csv_path = raw_csv.replace('raw','clean')
+    os.makedirs(os.path.dirname(new_csv_path), exist_ok=True)
     df.to_csv(f"{new_csv_path}",index=False)
 
     print(f"\nCleaned data has been saved to '{new_csv_path}'")
