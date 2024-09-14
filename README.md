@@ -9,7 +9,7 @@ This project is a Python script that scrapes car listings from DoneDeal.ie for s
 - **Scrapes car listings** from DoneDeal.ie for selected makes and models.
 - **Calculates average prices** of the cars listed.
 - **Generates graphs** showing the trend in average prices over time.
-- **Identifies the cheapest cars** with lower-than-average mileage.
+- **Identifies the best deals** by using linear regression.
 - **Sends an email report** containing the graph and a summary of the findings.
 - **Automated daily execution** via cron job (optional).
 
