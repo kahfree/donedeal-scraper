@@ -121,7 +121,8 @@ def extract_listing_info(li_element):
         data['total_kms'] = 'No details found'
 
     # Extract the price
-    price_element = li_element.find('p', text=re.compile(r'€\d+'))
+    price_element = li_element.find('div', text=re.compile(r'€\d+'))
+    # price_element = li_element.find('p')
     data['price'] = price_element.get_text(strip=True) if price_element else 'No price found'
 
     # Extract the link
@@ -286,31 +287,39 @@ def send_email(graph_path, percentage_diff, cheapest_cars):
 
 def clean_raw_listings(raw_csv):
     df = pd.read_csv(raw_csv)
+    print("Test 1", df)
     column_data_types = df.dtypes
     print("Data types of each column:\n", column_data_types)
     # Step 1: Clean the 'price' column
     df['price'] = df['price'].replace({'€': '', ',': ''}, regex=True)
+    print("Test 2", df)
     df['price'] = pd.to_numeric(df['price'], errors='coerce')
+    print("Test 3", df)
     df = df.dropna(subset=['price'])
-
+    print("Test 4", df)
     # Step 2: Clean the 'total_kms' column
     # Convert miles to kilometers where necessary
     def convert_to_kms(value):
-        value = str(value).replace(',', '')
-        if 'mi' in value:
-            kms = float(value.replace(' mi', '')) * 1.60934
-        elif 'km' in value:
-            kms = float(value.replace(' km', ''))
-        else:
-            return None  # For values that are not valid
-        return kms
+        try:
+            value = str(value).replace(',', '')
+            if 'mi' in value:
+                kms = float(value.replace(' mi', '')) * 1.60934
+            elif 'km' in value:
+                kms = float(value.replace(' km', ''))
+            else:
+                return None  # For values that are not valid
+            return kms
+        except ValueError:
+            return 0.0
 
     df['total_kms'] = df['total_kms'].apply(convert_to_kms)
+    print("Test 5", df)
     df = df.dropna(subset=['total_kms'])
+    print("Test 6", df)
 
     # Step 3: Drop the 'engine_size' column
     df = df.drop(columns=['engine_size'])
-
+    print("Test 7", df)
     # Step 4: Get the value counts of 'engine_type'
     engine_type_counts = df['engine_type'].value_counts()
 
