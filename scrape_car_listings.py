@@ -16,19 +16,19 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
-def dealer_dictionary_generator(make, model):
+def dealer_dictionary_generator(make, model, words):
     dealer_count = 0
     dealer_dictionary = {}
 
     start_from = 0
-    soup = get_page(make, model, start_from)
+    soup = get_page(make, model, words, start_from)
     result_count = get_result_count(soup)
     result_count = int(result_count)
     page_count = 1
     rows = []
 
     while start_from <= result_count:
-        soup = get_page(make, model, start_from)
+        soup = get_page(make, model, words, start_from)
         
         # Find all li elements with data-testid starting with 'listing-card-index-'
         li_elements = soup.find_all('li', attrs={'data-testid': re.compile(r'listing-card-index-\d+')})
@@ -43,7 +43,7 @@ def dealer_dictionary_generator(make, model):
         start_from += 30
     
     # Specify the CSV file path
-    csv_file_path = f'raw_listings/{make}_{model}_listings_raw.csv'
+    csv_file_path = f'raw_listings/{make}_{model}_{words}_listings_raw.csv'
 
     # Write data to CSV
     os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
@@ -70,20 +70,25 @@ def get_result_count(soup):
         print("h2 element with data-testid 'h2-details-text' not found.")
     return 0
 
-def get_page(make, model, start_from):
+def get_page(make, model, words, start_from):
     base_url = "https://www.donedeal.ie/cars"
     
     # Manually construct the URL parameters
+    # https://www.donedeal.ie/cars?year_from=2011&year_to=2016&make=BMW;model:3-Series&words=F30&fuelType=Diesel&transmission=Manual&country=Ireland&verifications=manufacturerApproved&verifications=greenlightVerified&verifications=trustedDealer
     make_model_param = f"{urllib.parse.quote(make)};model:{urllib.parse.quote(model)}"
     params = {
         'year_from': 2014,
         'year_to': 2016,
         'make': make_model_param,
-        'start': start_from
+        'start': start_from,
+        'words': words,
+        'fuelType': 'Diesel',
+        'transmission': 'Manual',
+        'country': 'Ireland',
     }
 
     # Manually construct the query string
-    query_string = f"year_from={params['year_from']}&year_to={params['year_to']}&make={params['make']}&start={params['start']}&country=Ireland"
+    query_string = f"year_from={params['year_from']}&year_to={params['year_to']}&make={params['make']}&start={params['start']}&words={params['words']}&fuelType={params['fuelType']}&transmission={params['transmission']}&country={params['country']}&verifications=manufacturerApproved&verifications=greenlightVerified&verifications=trustedDealer"
     url = f"{base_url}?{query_string}"
     print(f"Fetching URL: {url}")
 
@@ -286,6 +291,7 @@ def send_email(graph_path, percentage_diff, cheapest_cars):
     print(f"Email sent to {to_address}.")
 
 def clean_raw_listings(raw_csv):
+        
     df = pd.read_csv(raw_csv)
     print("Test 1", df)
     column_data_types = df.dtypes
@@ -339,20 +345,20 @@ def clean_raw_listings(raw_csv):
 def main():
     # Example usage:
     makes_and_models = [
-        ('Audi', 'A4'),
-        ('BMW', '3-Series'),
-        ('Mercedes-Benz', 'C-Class')
+        ('Audi', 'A4', 'sline'),
+        ('BMW', '3-Series', 'F30'),
+        ('Mercedes-Benz', 'C-Class', 'AMG')
     ]
 
-    for make, model in makes_and_models:
-        dealer_dictionary = dealer_dictionary_generator(make, model)
-        clean_raw_listings(f'raw_listings/{make}_{model}_listings_raw.csv')
-        avg_price = calculate_average_price(f'clean_listings/{make}_{model}_listings_clean.csv', f'{make}_{model}')
-        historical_avg = calculate_average_of_averages(f'averages/{make}_{model}_average.csv')
+    for make, model, words in makes_and_models:
+        dealer_dictionary = dealer_dictionary_generator(make, model, words)
+        clean_raw_listings(f'raw_listings/{make}_{model}_{words}_listings_raw.csv')
+        avg_price = calculate_average_price(f'clean_listings/{make}_{model}_{words}_listings_clean.csv', f'{make}_{model}_{words}')
+        historical_avg = calculate_average_of_averages(f'averages/{make}_{model}_{words}_average.csv')
         percentage_diff = calculate_percentage_difference(avg_price, historical_avg)
 
-        graph_path = generate_graph(f'averages/{make}_{model}_average.csv', f'{make}_{model}')
-        cheapest_cars = find_cheapest_cars(f'clean_listings/{make}_{model}_listings_clean.csv', avg_price)
+        graph_path = generate_graph(f'averages/{make}_{model}_{words}_average.csv', f'{make}_{model}_{words}')
+        cheapest_cars = find_cheapest_cars(f'clean_listings/{make}_{model}_{words}_listings_clean.csv', avg_price)
 
         send_email(graph_path, percentage_diff, cheapest_cars)
 
