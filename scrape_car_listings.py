@@ -196,7 +196,9 @@ def generate_graph(output_csv, make_model):
         for row in reader:
             # Check if the row matches the current make and model
             if row['make_model'] == make_model:
-                timestamps.append(row['timestamp'])
+                dt = datetime.datetime.strptime(row['timestamp'], "%Y-%m-%d_%H-%M-%S")
+                fmt_dt = formatted_timestamp = dt.strftime("%m/%d/%Y\n%H:%M")
+                timestamps.append(fmt_dt)
                 avg_price_text = row['average_price'].replace('€', '').replace(',', '')
                 averages.append(float(avg_price_text))
 
@@ -206,7 +208,7 @@ def generate_graph(output_csv, make_model):
     plt.xlabel('Timestamp')
     plt.ylabel('Average Price (€)')
     plt.title(f'Average Price for {make_model} Over Time')
-    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+    plt.xticks(rotation=0)  # Rotate x-axis labels for better readability
     plt.tight_layout()  # Adjust layout to fit labels
 
     # Save the graph as an image file
@@ -253,10 +255,11 @@ def find_cheapest_cars(input_csv, average_price):
 
     return cars
 
-def send_email(graph_path, percentage_diff, cheapest_cars):
+def send_email(graph_path, percentage_diff, cheapest_cars, car_type):
     from_address = "ethancaff@gmail.com"
     to_address = "ethancaff@gmail.com"
-    subject = "Daily Car Listings Report"
+    date = datetime.datetime.today().strftime('%d-%m-%Y')
+    subject = f"{car_type}'s prices {date}"
 
     msg = MIMEMultipart()
     msg['From'] = from_address
@@ -345,9 +348,9 @@ def clean_raw_listings(raw_csv):
 def main():
     # Example usage:
     makes_and_models = [
-        ('Audi', 'A4', 'sline'),
+        ('Audi', 'A4', 'S-line'),
         ('BMW', '3-Series', 'F30'),
-        ('Mercedes-Benz', 'C-Class', 'AMG')
+        ('Skoda', 'Octavia', 'VRS')
     ]
 
     for make, model, words in makes_and_models:
@@ -360,7 +363,7 @@ def main():
         graph_path = generate_graph(f'averages/{make}_{model}_{words}_average.csv', f'{make}_{model}_{words}')
         cheapest_cars = find_cheapest_cars(f'clean_listings/{make}_{model}_{words}_listings_clean.csv', avg_price)
 
-        send_email(graph_path, percentage_diff, cheapest_cars)
+        send_email(graph_path, percentage_diff, cheapest_cars, f'{make} {model} {words}')
 
 if __name__ == "__main__":
     main()
