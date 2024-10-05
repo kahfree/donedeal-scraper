@@ -266,17 +266,41 @@ def send_email(graph_path, percentage_diff, cheapest_cars, car_type):
     msg['To'] = to_address
     msg['Subject'] = subject
 
-    # Add text content
-    body = f"""
-    Today's average price is {percentage_diff:.2f}% different from the historical average.
+    # # Add text content
+    # body = f"""
+    # Today's average price is {percentage_diff:.2f}% different from the historical average.
 
-    The 3 cheapest cars with lower than average mileage are:
+    # The 3 cheapest cars with lower than average mileage are:
+    # """
+    # for car in cheapest_cars:
+    #     price, mileage, data = car
+    #     body += f"\n- {data['title']}: €{data['price']:,} with {data['total_kms']:,} KMs (Link: {data['link']})"
+    # Create HTML email content
+    body = f"""
+    <html>
+        <body>
+            <p>Today's average price is <strong>{percentage_diff:.2f}%</strong> different from the historical average.</p>
+            <p>The 3 cheapest cars with lower than average mileage are:</p>
+            <ul>
     """
+
+    # Add each car as a list item with a clickable link
     for car in cheapest_cars:
         price, mileage, data = car
-        body += f"\n- {data['title']}: {data['price']} with {data['total_kms']} (Link: {data['link']})"
+        body += f"""
+            <li>
+                 <a href="{data['link']}">{data['title']}: €{data['price']:,} with {data['total_kms']:,} KMs</a>
+            </li>
+        """
 
-    msg.attach(MIMEText(body, 'plain'))
+    # Close the HTML tags
+    body += """
+            </ul>
+        </body>
+    </html>
+    """
+
+    msg.attach(MIMEText(body, 'html'))
 
     # Attach the graph
     with open(graph_path, 'rb') as f:
