@@ -38,6 +38,7 @@ def get_raw_listings(make, model, words):
 
         # Iterate over each li element and extract the data
         for li_element in li_elements:
+            print(type(li_element))
             row = extract_listing_info(li_element)
             rows.append(row)
 
@@ -68,18 +69,19 @@ def get_raw_listings(make, model, words):
 
 
 def get_result_count(soup):
-    h2_element = soup.find('h2', {'data-testid': 'h2-details-text'})
+    if soup:
+        h2_element = soup.find('h2', {'data-testid': 'h2-details-text'})
 
-    if h2_element:
-        strong_tag = h2_element.find('strong')
-        if strong_tag:
-            important_text = strong_tag.get_text(strip=True)
-            print(f"Number of results: {important_text}")
-            return important_text
+        if h2_element:
+            strong_tag = h2_element.find('strong')
+            if strong_tag:
+                important_text = strong_tag.get_text(strip=True)
+                print(f"Number of results: {important_text}")
+                return important_text
+            else:
+                print("Number of results not found.")
         else:
-            print("Number of results not found.")
-    else:
-        print("h2 element with data-testid 'h2-details-text' not found.")
+            print("h2 element with data-testid 'h2-details-text' not found.")
     return 0
 
 
@@ -141,7 +143,8 @@ def get_page(make, model, words, start_from):
 
 def extract_listing_info(li_element):
     data = {}
-
+    if li_element is None:
+        return data
     # Extract the title
     title_element = li_element.find('p')
     data['title'] = (
