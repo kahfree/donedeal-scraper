@@ -16,56 +16,59 @@ from bs4 import BeautifulSoup
 from sklearn.preprocessing import StandardScaler
 
 
-def get_raw_listings(make, model, words):
-    raw_listings = {}
+def generate_raw_listings_csv(make, model, words):
+    csv_file_path  = ''
 
-    start_from = 0
-    soup = get_page(make, model, words, start_from)
-    result_count = get_result_count(soup)
-    result_count = int(result_count)
-    page_count = 1
-    rows = []
-
-    while start_from <= result_count:
-
+    try:
+        start_from = 0
         soup = get_page(make, model, words, start_from)
-        # Find all li elements with data-testid
-        # starting with 'listing-card-index-'
-        li_elements = soup.find_all(
-            'li',
-            attrs={'data-testid': re.compile(r'listing-card-index-\d+')}
+        result_count = get_result_count(soup)
+        result_count = int(result_count)
+        page_count = 1
+        rows = []
+
+        while start_from <= result_count:
+
+            soup = get_page(make, model, words, start_from)
+            # Find all li elements with data-testid
+            # starting with 'listing-card-index-'
+            li_elements = soup.find_all(
+                'li',
+                attrs={'data-testid': re.compile(r'listing-card-index-\d+')}
+                )
+
+            # Iterate over each li element and extract the data
+            for li_element in li_elements:
+                print(type(li_element))
+                row = extract_listing_info(li_element)
+                rows.append(row)
+
+            page_count += 1
+            print(f"Processed page starting at: {start_from}")
+            start_from += 30
+
+        # Specify the CSV file path
+        csv_file_path = f'raw_listings/{make}_{model}_{words}_listings_raw.csv'
+
+        # Write data to CSV
+        os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
+        with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
+
+            writer = csv.DictWriter(
+                file,
+                fieldnames=[
+                    'title', 'engine_size', 'engine_type',
+                    'total_kms', 'price', 'link'
+                ]
             )
 
-        # Iterate over each li element and extract the data
-        for li_element in li_elements:
-            print(type(li_element))
-            row = extract_listing_info(li_element)
-            rows.append(row)
+            writer.writeheader()
+            writer.writerows(rows)
 
-        page_count += 1
-        print(f"Processed page starting at: {start_from}")
-        start_from += 30
-
-    # Specify the CSV file path
-    csv_file_path = f'raw_listings/{make}_{model}_{words}_listings_raw.csv'
-
-    # Write data to CSV
-    os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
-    with open(csv_file_path, mode='w', newline='', encoding='utf-8') as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=[
-                'title', 'engine_size', 'engine_type',
-                'total_kms', 'price', 'link'
-            ]
-        )
-
-        writer.writeheader()
-        writer.writerows(rows)
-
-    print(f"Data successfully saved to {csv_file_path}.")
-    return raw_listings
+        print(f"Data successfully saved to {csv_file_path}.")
+        return csv_file_path
+    except:
+        raise Exception('An error occurred when fetching listings') 
 
 
 def get_result_count(soup):
@@ -457,7 +460,7 @@ def main():
 
     for make, model, words in makes_and_models:
         # Creates raw csv of filtered listings
-        get_raw_listings(
+        generate_raw_listings_csv(
             make,
             model, 
             words
