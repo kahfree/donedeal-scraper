@@ -16,6 +16,25 @@ from bs4 import BeautifulSoup
 from sklearn.preprocessing import StandardScaler
 
 
+makes_and_models = [
+    ('Audi', 'A4', 'S-line'),
+    ('BMW', '3-Series', 'F30'),
+    ('Skoda', 'Octavia', 'VRS')
+]
+# Script will find 3 cars closest these values
+ideal_values = {
+    'price': 10000,
+    'total_kms': 130000
+}
+
+filters = {
+    'year_from': 2014,
+    'year_to': 2016,
+    'fuelType': 'Diesel',
+    'transmission': 'Manual',
+    'country': 'Ireland',
+}
+
 def generate_raw_listings_csv(make, model, words):
     csv_file_path  = ''
 
@@ -100,17 +119,18 @@ def get_page(make, model, words, start_from):
     make_model_param = (f"{urllib.parse.quote(make)};"
                         f"model:{urllib.parse.quote(model)}")
     params = {
-        'year_from': 2014,
-        'year_to': 2016,
+        'year_from': filters['year_from'],
+        'year_to': filters['year_to'],
         'make': make_model_param,
         'start': start_from,
         'words': words,
-        'fuelType': 'Diesel',
-        'transmission': 'Manual',
-        'country': 'Ireland',
+        'fuelType': filters['fuelType'],
+        'transmission': filters['transmission'],
+        'country': filters['country'],
     }
 
     # Manually construct the query string
+    # Verifications are hardcoded in for everyones sake
     query_string = (f"year_from={params['year_from']}"
                     f"&year_to={params['year_to']}"
                     f"&make={params['make']}&start={params['start']}"
@@ -295,11 +315,6 @@ def find_cheapest_cars(input_csv, average_price):
 
     data = pd.read_csv(input_csv)
 
-    ideal_values = {
-        'price': 10000,
-        'total_kms': 130000
-    }
-
     data['price_diff'] = (
         (data['price'] - ideal_values['price'])
         .abs()
@@ -324,9 +339,9 @@ def find_cheapest_cars(input_csv, average_price):
     # # Select the top 3 cheapest cars
     top_deals = data.head(3)
 
-    # # Convert the top deals into a list of tuples for compatibility
+    # Convert into a list of car dicts
     cars = (
-        [(row['price'], row['total_kms'], row)
+        [(row)
             for _, row in top_deals.iterrows()]
     )
 
@@ -357,15 +372,13 @@ def send_email(graph_path, percentage_diff, cheapest_cars, car_type):
                 <ul>
         """
     )
-
     # Add each car as a list item with a clickable link
     for car in cheapest_cars:
-        data = car
         body += f"""
             <li>
-                 <a href="{data['link']}">
-                    {data['title']}: €{data['price']:,}
-                     with {data['total_kms']:,} KMs
+                 <a href="{car['link']}">
+                    {car['title']}: €{car['price']:,}
+                     with {car['total_kms']:,} KMs
                 </a>
             </li>
         """
@@ -452,11 +465,7 @@ def clean_raw_listings(raw_csv):
 
 def main():
     # Example usage:
-    makes_and_models = [
-        ('Audi', 'A4', 'S-line'),
-        ('BMW', '3-Series', 'F30'),
-        ('Skoda', 'Octavia', 'VRS')
-    ]
+    
 
     for make, model, words in makes_and_models:
         # Creates raw csv of filtered listings
